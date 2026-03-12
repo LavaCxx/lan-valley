@@ -4,7 +4,6 @@ use super::grid::Grid;
 use super::inventory::Inventory;
 use super::types::{Building, BuildingType, CropType};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// 建筑管理器
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,29 +11,38 @@ pub struct BuildingManager {
     /// 已放置的建筑
     buildings: Vec<Building>,
     /// 已购买但未放置的建筑数量
-    owned: HashMap<BuildingType, u32>,
+    owned: Vec<(BuildingType, u32)>,
 }
 
 impl BuildingManager {
     pub fn new() -> Self {
         Self {
             buildings: Vec::new(),
-            owned: HashMap::new(),
+            owned: Vec::new(),
         }
+    }
+
+    /// 查找已拥有建筑的索引
+    fn find_owned(&self, building_type: BuildingType) -> Option<usize> {
+        self.owned.iter().position(|(t, _)| *t == building_type)
     }
 
     /// 购买建筑
     pub fn buy_building(&mut self, building_type: BuildingType) {
-        *self.owned.entry(building_type).or_insert(0) += 1;
+        if let Some(idx) = self.find_owned(building_type) {
+            self.owned[idx].1 += 1;
+        } else {
+            self.owned.push((building_type, 1));
+        }
     }
 
     /// 使用已拥有的建筑
     pub fn use_owned_building(&mut self, building_type: BuildingType) -> bool {
-        if let Some(count) = self.owned.get_mut(&building_type) {
-            if *count > 0 {
-                *count -= 1;
-                if *count == 0 {
-                    self.owned.remove(&building_type);
+        if let Some(idx) = self.find_owned(building_type) {
+            if self.owned[idx].1 > 0 {
+                self.owned[idx].1 -= 1;
+                if self.owned[idx].1 == 0 {
+                    self.owned.remove(idx);
                 }
                 return true;
             }
@@ -44,7 +52,9 @@ impl BuildingManager {
 
     /// 获取已拥有建筑数量
     pub fn owned_count(&self, building_type: BuildingType) -> u32 {
-        *self.owned.get(&building_type).unwrap_or(&0)
+        self.find_owned(building_type)
+            .map(|idx| self.owned[idx].1)
+            .unwrap_or(0)
     }
 
     /// 放置建筑
@@ -59,7 +69,7 @@ impl BuildingManager {
 
     /// 获取可放置的建筑列表
     pub fn get_placeable_buildings(&self) -> Vec<(BuildingType, u32)> {
-        self.owned.iter().map(|(&bt, &count)| (bt, count)).collect()
+        self.owned.clone()
     }
 
     /// 运行洒水器，返回浇水的地块数

@@ -2,13 +2,12 @@
 
 use super::types::{CropType, DishType, ItemType};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// 背包
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Inventory {
-    /// 物品数量
-    items: HashMap<ItemType, u32>,
+    /// 物品列表 (物品, 数量)
+    items: Vec<(ItemType, u32)>,
     /// 金币
     pub gold: u32,
 }
@@ -16,14 +15,23 @@ pub struct Inventory {
 impl Inventory {
     pub fn new() -> Self {
         Self {
-            items: HashMap::new(),
+            items: Vec::new(),
             gold: 500, // 初始金币
         }
     }
 
+    /// 查找物品索引
+    fn find_item(&self, item_type: &ItemType) -> Option<usize> {
+        self.items.iter().position(|(t, _)| t == item_type)
+    }
+
     /// 添加物品
     pub fn add(&mut self, item_type: ItemType, count: u32) {
-        *self.items.entry(item_type).or_insert(0) += count;
+        if let Some(idx) = self.find_item(&item_type) {
+            self.items[idx].1 += count;
+        } else {
+            self.items.push((item_type, count));
+        }
     }
 
     /// 使用物品（单个）
@@ -33,11 +41,11 @@ impl Inventory {
 
     /// 使用物品（指定数量）
     pub fn use_items(&mut self, item_type: &ItemType, count: u32) -> bool {
-        if let Some(owned) = self.items.get_mut(item_type) {
-            if *owned >= count {
-                *owned -= count;
-                if *owned == 0 {
-                    self.items.remove(item_type);
+        if let Some(idx) = self.find_item(item_type) {
+            if self.items[idx].1 >= count {
+                self.items[idx].1 -= count;
+                if self.items[idx].1 == 0 {
+                    self.items.remove(idx);
                 }
                 return true;
             }
@@ -67,7 +75,9 @@ impl Inventory {
 
     /// 获取物品数量
     pub fn count(&self, item_type: &ItemType) -> u32 {
-        *self.items.get(item_type).unwrap_or(&0)
+        self.find_item(item_type)
+            .map(|idx| self.items[idx].1)
+            .unwrap_or(0)
     }
 
     /// 花费金币
@@ -122,9 +132,9 @@ impl Inventory {
         let mut crops: Vec<(CropType, u32)> = self
             .items
             .iter()
-            .filter_map(|(item, &count)| {
+            .filter_map(|(item, count)| {
                 if let ItemType::Crop(crop) = item {
-                    Some((*crop, count))
+                    Some((*crop, *count))
                 } else {
                     None
                 }
@@ -139,9 +149,9 @@ impl Inventory {
         let mut seeds: Vec<(CropType, u32)> = self
             .items
             .iter()
-            .filter_map(|(item, &count)| {
+            .filter_map(|(item, count)| {
                 if let ItemType::Seed(crop) = item {
-                    Some((*crop, count))
+                    Some((*crop, *count))
                 } else {
                     None
                 }
@@ -156,9 +166,9 @@ impl Inventory {
         let mut jellies: Vec<(CropType, u32)> = self
             .items
             .iter()
-            .filter_map(|(item, &count)| {
+            .filter_map(|(item, count)| {
                 if let ItemType::Jelly(crop) = item {
-                    Some((*crop, count))
+                    Some((*crop, *count))
                 } else {
                     None
                 }
@@ -173,9 +183,9 @@ impl Inventory {
         let mut dishes: Vec<(DishType, u32)> = self
             .items
             .iter()
-            .filter_map(|(item, &count)| {
+            .filter_map(|(item, count)| {
                 if let ItemType::Dish(dish) = item {
-                    Some((*dish, count))
+                    Some((*dish, *count))
                 } else {
                     None
                 }
@@ -187,12 +197,12 @@ impl Inventory {
 
     /// 获取物品总数
     pub fn total_items(&self) -> u32 {
-        self.items.values().sum()
+        self.items.iter().map(|(_, c)| *c).sum()
     }
 
     /// 获取物品列表（用于显示）
     pub fn list_all(&self) -> Vec<(ItemType, u32)> {
-        let mut items: Vec<_> = self.items.iter().map(|(k, &v)| (*k, v)).collect();
+        let mut items = self.items.clone();
         items.sort_by(|a, b| {
             match (&a.0, &b.0) {
                 (ItemType::Crop(c1), ItemType::Crop(c2)) => c1.name().cmp(c2.name()),
