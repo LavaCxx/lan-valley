@@ -1,0 +1,5 @@
+/target
+opencode_*.txt
+nul
+*.save
+*.log
