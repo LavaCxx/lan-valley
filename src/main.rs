@@ -249,23 +249,79 @@ fn run_game(
 fn handle_mouse(state: &mut GameState, mouse: MouseEvent, terminal_size: ratatui::layout::Rect) {
     match mouse.kind {
         MouseEventKind::Down(MouseButton::Left) => {
-            // 计算农场区域
-            let farm_width = (terminal_size.width / 2).saturating_sub(2); // 50% - borders
-            let farm_height = terminal_size.height.saturating_sub(2);
+            let click_x = mouse.column;
+            let click_y = mouse.row;
+
+            // 计算布局（与 render.rs 保持一致）
+            // 主布局：上半部分（农场+信息+日志）| 下半部分工具栏（3行高）
+            let toolbar_height = 3u16;
+            let main_height = terminal_size.height.saturating_sub(toolbar_height);
+
+            // 先检查是否点击工具栏区域
+            if click_y >= main_height {
+                // 工具栏区域：左40字符工具 | 右侧菜单按钮
+                let toolbar_inner_y = main_height + 1; // border后
+
+                // 工具选择区（左侧，宽度40）
+                if click_x < 40 {
+                    let tools = Tool::all();
+                    // 每个工具大约占8个字符宽度
+                    let toolbar_start_x = 2u16; // border + 1
+                    for (i, tool) in tools.iter().enumerate() {
+                        let tool_x = toolbar_start_x + (i as u16 * 8);
+                        if click_x >= tool_x && click_x < tool_x + 7 {
+                            state.select_tool(*tool);
+                            return;
+                        }
+                    }
+                } else {
+                    // 菜单按钮区（右侧）
+                    // 按钮: 🏪 商店 | 🎒 背包 | 🏗️ 建筑 | 🍳 烹饪
+                    // 每个按钮大约占10个字符
+                    let button_start_x = 42u16; // 40(工具区) + 2(border)
+                    let buttons = [
+                        ("商店", 's'),
+                        ("背包", 'i'),
+                        ("建筑", 'b'),
+                        ("烹饪", 'c'),
+                    ];
+                    for (i, (_, key)) in buttons.iter().enumerate() {
+                        let btn_x = button_start_x + (i as u16 * 10);
+                        if click_x >= btn_x && click_x < btn_x + 9 {
+                            match key {
+                                's' => state.open_shop(),
+                                'i' => state.open_inventory(),
+                                'b' => {
+                                    let placeable = state.buildings.get_placeable_buildings();
+                                    if placeable.is_empty() {
+                                        state.open_building_shop();
+                                    } else {
+                                        state.start_building_place();
+                                    }
+                                }
+                                'c' => state.open_cooking(),
+                                _ => {}
+                            }
+                            return;
+                        }
+                    }
+                }
+                return;
+            }
+
+            // 农场区域计算（左侧50%）
+            let farm_width = (terminal_size.width / 2).saturating_sub(2);
+            let farm_height = main_height.saturating_sub(2);
 
             // 计算网格参数
             let grid_width = state.grid.width as u16 * 3;
             let grid_height = state.grid.height as u16 * 2;
 
             // 网格起始位置（在农场区域内居中）
-            let farm_inner_x = terminal_size.x + 1;
-            let farm_inner_y = terminal_size.y + 1;
+            let farm_inner_x = 1u16; // border
+            let farm_inner_y = 1u16; // border
             let start_x = farm_inner_x + (farm_width.saturating_sub(grid_width)) / 2;
             let start_y = farm_inner_y + (farm_height.saturating_sub(grid_height)) / 2;
-
-            // 点击位置
-            let click_x = mouse.column;
-            let click_y = mouse.row;
 
             // 检查是否点击在网格内
             if click_x >= start_x && click_x < start_x + grid_width
@@ -280,52 +336,6 @@ fn handle_mouse(state: &mut GameState, mouse: MouseEvent, terminal_size: ratatui
                     } else {
                         // 否则移动光标
                         state.set_cursor(grid_x, grid_y);
-                    }
-                }
-            }
-
-            // 检查是否点击工具栏
-            let toolbar_y = terminal_size.height.saturating_sub(3);
-            if click_y >= toolbar_y {
-                let tools = Tool::all();
-                let toolbar_start_x = terminal_size.x + 2;
-                for (i, tool) in tools.iter().enumerate() {
-                    let tool_x = toolbar_start_x + (i as u16 * 10);
-                    if click_x >= tool_x && click_x < tool_x + 8 {
-                        state.select_tool(*tool);
-                        break;
-                    }
-                }
-            }
-
-            // 检查是否点击菜单按钮（底部）
-            let menu_y = terminal_size.height.saturating_sub(2);
-            if click_y >= menu_y {
-                let buttons = [
-                    ("商店", 's'),
-                    ("背包", 'i'),
-                    ("建筑", 'b'),
-                    ("烹饪", 'c'),
-                ];
-                let button_start_x = terminal_size.x + 2;
-                for (i, (_, key)) in buttons.iter().enumerate() {
-                    let btn_x = button_start_x + (i as u16 * 12);
-                    if click_x >= btn_x && click_x < btn_x + 10 {
-                        match key {
-                            's' => state.open_shop(),
-                            'i' => state.open_inventory(),
-                            'b' => {
-                                let placeable = state.buildings.get_placeable_buildings();
-                                if placeable.is_empty() {
-                                    state.open_building_shop();
-                                } else {
-                                    state.start_building_place();
-                                }
-                            }
-                            'c' => state.open_cooking(),
-                            _ => {}
-                        }
-                        break;
                     }
                 }
             }
