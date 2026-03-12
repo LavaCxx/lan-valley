@@ -194,15 +194,15 @@ impl GameState {
 
         self.tick_counter += 1;
 
-        // 每 6000 刻 = 10 分钟 = 1 游戏天 (tick_rate = 100ms)
-        if self.tick_counter >= 6000 {
+        // 每 3000 刻 = 5 分钟 = 1 游戏天 (tick_rate = 100ms)
+        if self.tick_counter >= 3000 {
             self.tick_counter = 0;
             self.advance_day();
         }
 
-        // 自动保存（每 600 刻 = 10 游戏天）
+        // 自动保存（每 300 刻 = 5 游戏天）
         self.auto_save_counter += 1;
-        if self.auto_save_counter >= 600 {
+        if self.auto_save_counter >= 300 {
             self.auto_save_counter = 0;
             if self.save() {
                 self.log("自动保存成功".to_string());
