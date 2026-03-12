@@ -154,8 +154,8 @@ impl GameState {
 
         self.tick_counter += 1;
 
-        // 每 60 刻 = 1 游戏天
-        if self.tick_counter >= 60 {
+        // 每 6000 刻 = 10 分钟 = 1 游戏天 (tick_rate = 100ms)
+        if self.tick_counter >= 6000 {
             self.tick_counter = 0;
             self.advance_day();
         }

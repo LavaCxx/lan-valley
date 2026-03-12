@@ -108,21 +108,32 @@ fn get_tile_display(
 
     // 检查是否有作物
     if let Some(crop) = &tile.crop {
-        let style: Style = if crop.is_mature() {
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD)
+        let (icon, style) = if crop.is_mature() {
+            (
+                crop.icon().to_string(),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
         } else {
-            Style::default().fg(Color::Green)
+            (
+                crop.icon().to_string(),
+                Style::default().fg(Color::Green),
+            )
         };
-        return (crop.icon().to_string(), style);
+
+        // 显示浇水状态：已浇水的作物加蓝色背景
+        if crop.watered {
+            return (icon, Style::default().fg(Color::Cyan).bg(Color::Rgb(30, 60, 90)));
+        }
+        return (icon, style);
     }
 
     // 显示土地状态
     match tile.soil {
         crate::game::SoilState::Grass => ("🌿".to_string(), Style::default().fg(Color::DarkGray)),
         crate::game::SoilState::Tilled => (
-            "🟫".to_string(),
+            "⬜".to_string(),
             Style::default().fg(Color::Rgb(139, 90, 43)),
         ),
         crate::game::SoilState::Watered => ("💧".to_string(), Style::default().fg(Color::Blue)),

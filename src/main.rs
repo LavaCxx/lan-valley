@@ -6,7 +6,7 @@ mod ui;
 
 use crate::game::{GameMode, GameState, SaveManager};
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -128,6 +128,10 @@ fn run_game(
         
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
+                // 只处理按下事件，忽略重复
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
                 match (key.modifiers, key.code) {
                     // 退出
                     (KeyModifiers::CONTROL, KeyCode::Char('c')) |
