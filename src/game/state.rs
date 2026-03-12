@@ -107,7 +107,7 @@ impl GameState {
         let biome = Biome::from_ip(ip_last_octet);
 
         let mut state = Self {
-            grid: Grid::new(8, 6),
+            grid: Grid::new(5, 5), // 初始 5x5 农场
             inventory: Inventory::new(),
             buildings: BuildingManager::new(),
             time: GameTime::new(),
@@ -431,12 +431,70 @@ impl GameState {
         }
     }
 
+    /// 获取农场升级费用
+    pub fn farm_upgrade_cost(&self) -> u32 {
+        let current_size = self.grid.width.max(self.grid.height);
+        // 每次升级费用 = 当前大小 * 200
+        (current_size as u32) * 200
+    }
+
+    /// 检查是否可以升级农场
+    pub fn can_upgrade_farm(&self) -> bool {
+        let max_size = 12;
+        self.grid.width < max_size && self.grid.height < max_size
+    }
+
+    /// 升级农场（扩大 1x1）
+    pub fn upgrade_farm(&mut self) -> bool {
+        if !self.can_upgrade_farm() {
+            self.log("农场已达最大尺寸！".to_string());
+            return false;
+        }
+
+        let cost = self.farm_upgrade_cost();
+        if self.inventory.gold < cost {
+            self.log(format!("金币不足！需要 {} 金币", cost));
+            return false;
+        }
+
+        self.inventory.gold -= cost;
+        let new_width = (self.grid.width + 1).min(12);
+        let new_height = (self.grid.height + 1).min(12);
+
+        // 扩展网格
+        self.grid.expand(new_width, new_height);
+        self.log(format!(
+            "农场升级成功！现在 {}x{}",
+            self.grid.width, self.grid.height
+        ));
+        true
+    }
+
     /// 获取当前菜单项
     pub fn get_menu_items(&self) -> Vec<MenuItem> {
         match self.mode {
             GameMode::Shop => {
+                let mut items = Vec::new();
+
+                // 农场升级选项
+                if self.can_upgrade_farm() {
+                    let cost = self.farm_upgrade_cost();
+                    let current = format!("{}x{}", self.grid.width, self.grid.height);
+                    items.push(MenuItem {
+                        label: format!("🌱 升级农场 {} → {}x{} ({}G)", current, self.grid.width + 1, self.grid.height + 1, cost),
+                        crop: None,
+                        building: None,
+                    });
+                } else {
+                    items.push(MenuItem {
+                        label: format!("🌱 农场已达最大 ({}x{})", self.grid.width, self.grid.height),
+                        crop: None,
+                        building: None,
+                    });
+                }
+
                 // 所有可购买的种子
-                vec![
+                items.extend(vec![
                     MenuItem {
                         label: format!("防风草种子 (20G)"),
                         crop: Some(CropType::Parsnip),
@@ -482,7 +540,8 @@ impl GameState {
                         crop: Some(CropType::Yam),
                         building: None,
                     },
-                ]
+                ]);
+                items
             }
             GameMode::BuildingShop => {
                 // 建筑商店
@@ -661,7 +720,10 @@ impl GameState {
             GameMode::Shop => {
                 let items = self.get_menu_items();
                 if let Some(item) = items.get(self.menu_index) {
-                    if let Some(crop) = item.crop {
+                    // 第一项是农场升级
+                    if self.menu_index == 0 && item.crop.is_none() {
+                        self.upgrade_farm();
+                    } else if let Some(crop) = item.crop {
                         if self.inventory.buy_seed(crop, 1) {
                             self.log(format!("购买了{}种子", crop.name()));
                         } else {

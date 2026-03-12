@@ -103,4 +103,22 @@ impl Grid {
         }
         false
     }
+
+    /// 扩展网格
+    pub fn expand(&mut self, new_width: usize, new_height: usize) {
+        // 扩展每一行
+        for row in &mut self.tiles {
+            while row.len() < new_width {
+                row.push(Tile::default());
+            }
+        }
+
+        // 添加新行
+        while self.tiles.len() < new_height {
+            self.tiles.push(vec![Tile::default(); new_width]);
+        }
+
+        self.width = new_width;
+        self.height = new_height;
+    }
 }
