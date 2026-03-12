@@ -1,6 +1,6 @@
 // UI 渲染
 
-use crate::game::{GameMode, GameState};
+use crate::game::{GameMode, GameState, Tool};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -11,7 +11,16 @@ use ratatui::{
 
 /// 主渲染函数
 pub fn render(f: &mut Frame, state: &GameState) {
-    // 主布局：左侧农场 | 中间信息 | 右侧日志
+    // 主布局：左侧农场 | 中间信息 | 右侧日志 | 底部工具栏
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(10),
+            Constraint::Length(3), // 工具栏
+        ])
+        .split(f.area());
+
+    // 水平布局：农场 | 信息 | 日志
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
@@ -19,7 +28,7 @@ pub fn render(f: &mut Frame, state: &GameState) {
             Constraint::Percentage(30),
             Constraint::Percentage(20),
         ])
-        .split(f.area());
+        .split(main_chunks[0]);
 
     // 渲染农场
     render_farm(f, state, chunks[0]);
@@ -29,6 +38,9 @@ pub fn render(f: &mut Frame, state: &GameState) {
 
     // 渲染日志
     render_logs(f, state, chunks[2]);
+
+    // 渲染底部工具栏
+    render_toolbar(f, state, main_chunks[1]);
 }
 
 /// 渲染农场
@@ -237,4 +249,48 @@ fn render_logs(f: &mut Frame, state: &GameState, area: Rect) {
     let log_widget =
         List::new(logs).block(Block::default().borders(Borders::ALL).title(" 📜 日志 "));
     f.render_widget(log_widget, area);
+}
+
+/// 渲染底部工具栏
+fn render_toolbar(f: &mut Frame, state: &GameState, area: Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(40), // 工具选择
+            Constraint::Min(10),    // 菜单按钮
+        ])
+        .split(area);
+
+    // 工具选择区
+    let tools = Tool::all();
+    let tool_spans: Vec<Span> = tools
+        .iter()
+        .map(|tool| {
+            let is_selected = state.current_tool == *tool;
+            let style = if is_selected {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            Span::styled(format!(" {} {} ", tool.icon(), tool.name()), style)
+        })
+        .collect();
+
+    let toolbar = Paragraph::new(Line::from(tool_spans))
+        .block(Block::default().borders(Borders::ALL).title(" 🛠️ 工具 "));
+    f.render_widget(toolbar, chunks[0]);
+
+    // 菜单按钮区
+    let buttons = ["🏪 商店", "🎒 背包", "🏗️ 建筑", "🍳 烹饪"];
+    let button_spans: Vec<Span> = buttons
+        .iter()
+        .map(|btn| Span::styled(format!(" {} ", btn), Style::default().fg(Color::Cyan)))
+        .collect();
+
+    let menu_bar = Paragraph::new(Line::from(button_spans))
+        .block(Block::default().borders(Borders::ALL).title(" 📋 菜单 "));
+    f.render_widget(menu_bar, chunks[1]);
 }

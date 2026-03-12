@@ -66,7 +66,12 @@ impl Grid {
     pub fn plant(&mut self, x: usize, y: usize, crop_type: CropType) -> bool {
         if let Some(tile) = self.get_mut(x, y) {
             if tile.crop.is_none() && tile.soil != SoilState::Grass {
-                tile.crop = Some(Crop::new(crop_type));
+                let mut crop = Crop::new(crop_type);
+                // 如果土壤已浇水，作物也被浇水
+                if tile.soil == SoilState::Watered {
+                    crop.watered = true;
+                }
+                tile.crop = Some(crop);
                 return true;
             }
         }

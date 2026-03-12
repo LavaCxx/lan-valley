@@ -10,7 +10,7 @@ pub mod types;
 
 // 主要对外接口
 pub use save::SaveManager;
-pub use state::{GameMode, GameState, MenuItem};
+pub use state::{GameMode, GameState, MenuItem, Tool};
 
 // 常用类型重新导出
 pub use types::{

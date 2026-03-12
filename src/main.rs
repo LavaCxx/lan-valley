@@ -4,13 +4,13 @@
 mod game;
 mod ui;
 
-use crate::game::{GameMode, GameState, SaveManager};
+use crate::game::{GameMode, GameState, SaveManager, Tool};
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, layout::Rect, Terminal};
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -127,12 +127,13 @@ fn run_game(
             .unwrap_or_else(|| Duration::from_secs(0));
         
         if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                // 只处理按下事件，忽略重复
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
-                match (key.modifiers, key.code) {
+            match event::read()? {
+                Event::Key(key) => {
+                    // 只处理按下事件，忽略重复
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    match (key.modifiers, key.code) {
                     // 退出
                     (KeyModifiers::CONTROL, KeyCode::Char('c')) |
                     (KeyModifiers::NONE, KeyCode::Char('q')) => {
@@ -227,6 +228,13 @@ fn run_game(
                     _ => {}
                 }
             }
+            Event::Mouse(mouse) => {
+                let size = terminal.size()?;
+                let rect = Rect::new(0, 0, size.width, size.height);
+                handle_mouse(state, mouse, rect);
+            }
+            _ => {}
+        }
         }
         
         // 更新游戏状态
@@ -234,6 +242,101 @@ fn run_game(
             state.update();
             last_tick = Instant::now();
         }
+    }
+}
+
+/// 处理鼠标事件
+fn handle_mouse(state: &mut GameState, mouse: MouseEvent, terminal_size: ratatui::layout::Rect) {
+    match mouse.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            // 计算农场区域
+            let farm_width = (terminal_size.width / 2).saturating_sub(2); // 50% - borders
+            let farm_height = terminal_size.height.saturating_sub(2);
+
+            // 计算网格参数
+            let grid_width = state.grid.width as u16 * 3;
+            let grid_height = state.grid.height as u16 * 2;
+
+            // 网格起始位置（在农场区域内居中）
+            let farm_inner_x = terminal_size.x + 1;
+            let farm_inner_y = terminal_size.y + 1;
+            let start_x = farm_inner_x + (farm_width.saturating_sub(grid_width)) / 2;
+            let start_y = farm_inner_y + (farm_height.saturating_sub(grid_height)) / 2;
+
+            // 点击位置
+            let click_x = mouse.column;
+            let click_y = mouse.row;
+
+            // 检查是否点击在网格内
+            if click_x >= start_x && click_x < start_x + grid_width
+               && click_y >= start_y && click_y < start_y + grid_height {
+                let grid_x = ((click_x - start_x) / 3) as usize;
+                let grid_y = ((click_y - start_y) / 2) as usize;
+
+                if grid_x < state.grid.width && grid_y < state.grid.height {
+                    // 如果点击同一位置，执行智能操作
+                    if state.cursor == (grid_x, grid_y) {
+                        state.smart_action();
+                    } else {
+                        // 否则移动光标
+                        state.set_cursor(grid_x, grid_y);
+                    }
+                }
+            }
+
+            // 检查是否点击工具栏
+            let toolbar_y = terminal_size.height.saturating_sub(3);
+            if click_y >= toolbar_y {
+                let tools = Tool::all();
+                let toolbar_start_x = terminal_size.x + 2;
+                for (i, tool) in tools.iter().enumerate() {
+                    let tool_x = toolbar_start_x + (i as u16 * 10);
+                    if click_x >= tool_x && click_x < tool_x + 8 {
+                        state.select_tool(*tool);
+                        break;
+                    }
+                }
+            }
+
+            // 检查是否点击菜单按钮（底部）
+            let menu_y = terminal_size.height.saturating_sub(2);
+            if click_y >= menu_y {
+                let buttons = [
+                    ("商店", 's'),
+                    ("背包", 'i'),
+                    ("建筑", 'b'),
+                    ("烹饪", 'c'),
+                ];
+                let button_start_x = terminal_size.x + 2;
+                for (i, (_, key)) in buttons.iter().enumerate() {
+                    let btn_x = button_start_x + (i as u16 * 12);
+                    if click_x >= btn_x && click_x < btn_x + 10 {
+                        match key {
+                            's' => state.open_shop(),
+                            'i' => state.open_inventory(),
+                            'b' => {
+                                let placeable = state.buildings.get_placeable_buildings();
+                                if placeable.is_empty() {
+                                    state.open_building_shop();
+                                } else {
+                                    state.start_building_place();
+                                }
+                            }
+                            'c' => state.open_cooking(),
+                            _ => {}
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        MouseEventKind::Down(MouseButton::Right) => {
+            // 右键关闭菜单
+            if state.mode != GameMode::Normal {
+                state.close_menu();
+            }
+        }
+        _ => {}
     }
 }
 

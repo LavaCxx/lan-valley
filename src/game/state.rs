@@ -26,6 +26,43 @@ pub enum GameMode {
     Cooking,
 }
 
+/// 当前工具（用于鼠标操作）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Tool {
+    /// 耕地
+    Till,
+    /// 浇水
+    Water,
+    /// 种植
+    Plant,
+    /// 收获
+    Harvest,
+}
+
+impl Tool {
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Tool::Till => "🔧",
+            Tool::Water => "💧",
+            Tool::Plant => "🌱",
+            Tool::Harvest => "🌾",
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Tool::Till => "耕地",
+            Tool::Water => "浇水",
+            Tool::Plant => "种植",
+            Tool::Harvest => "收获",
+        }
+    }
+
+    pub fn all() -> Vec<Tool> {
+        vec![Tool::Till, Tool::Water, Tool::Plant, Tool::Harvest]
+    }
+}
+
 /// 游戏状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
@@ -57,6 +94,8 @@ pub struct GameState {
     pub logs: Vec<String>,
     /// 待放置的建筑类型
     pub pending_building: Option<BuildingType>,
+    /// 当前工具（鼠标操作用）
+    pub current_tool: Tool,
     /// 自动保存计数器
     #[serde(skip)]
     auto_save_counter: u32,
@@ -82,6 +121,7 @@ impl GameState {
             menu_index: 0,
             logs: Vec::new(),
             pending_building: None,
+            current_tool: Tool::Till,
             auto_save_counter: 0,
         };
 
@@ -295,6 +335,98 @@ impl GameState {
                     .max(0)
                     .min(self.grid.height as i32 - 1) as usize;
                 self.cursor = (new_x, new_y);
+            }
+        }
+    }
+
+    /// 设置光标位置（用于鼠标点击）
+    pub fn set_cursor(&mut self, x: usize, y: usize) {
+        if x < self.grid.width && y < self.grid.height {
+            self.cursor = (x, y);
+        }
+    }
+
+    /// 使用当前工具
+    pub fn use_tool(&mut self) {
+        if self.mode != GameMode::Normal {
+            return;
+        }
+        match self.current_tool {
+            Tool::Till => {
+                self.till();
+            }
+            Tool::Water => {
+                self.water();
+            }
+            Tool::Plant => {
+                // 种植第一个可用种子
+                let seeds = self.inventory.list_seeds();
+                if let Some((crop, _)) = seeds.first() {
+                    if self.inventory.use_seed(*crop) {
+                        if !self.grid.plant(self.cursor.0, self.cursor.1, *crop) {
+                            self.inventory.add(super::types::ItemType::Seed(*crop), 1);
+                        } else {
+                            self.log(format!("种下了{}", crop.name()));
+                        }
+                    }
+                } else {
+                    self.log("没有种子！".to_string());
+                }
+            }
+            Tool::Harvest => {
+                self.harvest();
+            }
+        }
+    }
+
+    /// 选择工具
+    pub fn select_tool(&mut self, tool: Tool) {
+        self.current_tool = tool;
+    }
+
+    /// 智能操作（根据地块状态自动选择操作）
+    pub fn smart_action(&mut self) {
+        if self.mode != GameMode::Normal {
+            return;
+        }
+
+        if let Some(tile) = self.grid.get(self.cursor.0, self.cursor.1) {
+            // 优先收获成熟作物
+            if let Some(crop) = &tile.crop {
+                if crop.is_mature() {
+                    self.harvest();
+                    return;
+                }
+            }
+
+            // 没有作物时
+            if tile.crop.is_none() {
+                match tile.soil {
+                    super::types::SoilState::Grass => {
+                        self.till();
+                    }
+                    super::types::SoilState::Tilled => {
+                        self.water();
+                    }
+                    super::types::SoilState::Watered => {
+                        // 自动种植第一个可用种子
+                        let seeds = self.inventory.list_seeds();
+                        if let Some((crop, _)) = seeds.first() {
+                            if self.inventory.use_seed(*crop) {
+                                if !self.grid.plant(self.cursor.0, self.cursor.1, *crop) {
+                                    self.inventory.add(super::types::ItemType::Seed(*crop), 1);
+                                } else {
+                                    self.log(format!("种下了{}", crop.name()));
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if let Some(crop) = &tile.crop {
+                // 有作物但未成熟，检查是否需要浇水
+                if !crop.watered && tile.soil != super::types::SoilState::Watered {
+                    self.water();
+                }
             }
         }
     }
