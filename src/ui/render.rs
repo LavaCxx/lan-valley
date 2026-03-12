@@ -71,7 +71,7 @@ fn render_farm(f: &mut Frame, state: &GameState, area: Rect) {
     for y in 0..state.grid.height {
         for x in 0..state.grid.width {
             let tile = state.grid.get(x, y).unwrap();
-            let (icon, style) = get_tile_display(tile, x, y, state);
+            let (icon, style, progress) = get_tile_display(tile, x, y, state);
 
             let cell_x = start_x + (x as u16 * 3);
             let cell_y = start_y + (y as u16 * 2);
@@ -87,8 +87,23 @@ fn render_farm(f: &mut Frame, state: &GameState, area: Rect) {
                 style
             };
 
+            // 渲染第一行：图标
             let span = Span::styled(icon, final_style);
             f.render_widget(Paragraph::new(span), Rect::new(cell_x, cell_y, 3, 1));
+
+            // 渲染第二行：进度条
+            if let Some(prog) = progress {
+                let bar = render_progress_bar(prog);
+                let bar_style = if is_cursor {
+                    Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+                } else if prog >= 1.0 {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default().fg(Color::Green)
+                };
+                let bar_span = Span::styled(bar, bar_style);
+                f.render_widget(Paragraph::new(bar_span), Rect::new(cell_x, cell_y + 1, 3, 1));
+            }
         }
     }
 
@@ -101,13 +116,40 @@ fn render_farm(f: &mut Frame, state: &GameState, area: Rect) {
     }
 }
 
+/// 渲染进度条（3字符宽）
+fn render_progress_bar(progress: f32) -> String {
+    // 每个字符代表 1/3 的进度
+    let filled = (progress * 3.0).min(3.0) as usize;
+
+    let mut bar = String::new();
+    for i in 0..3 {
+        if i < filled {
+            // 完全填充的块
+            bar.push('█');
+        } else if i == filled && progress < 1.0 {
+            // 部分填充
+            let remainder = (progress * 3.0) % 1.0;
+            if remainder >= 0.66 {
+                bar.push('▓');
+            } else if remainder >= 0.33 {
+                bar.push('▒');
+            } else {
+                bar.push('░');
+            }
+        } else {
+            bar.push('░');
+        }
+    }
+    bar
+}
+
 /// 获取地块显示
 fn get_tile_display(
     tile: &crate::game::Tile,
     x: usize,
     y: usize,
     state: &GameState,
-) -> (String, ratatui::style::Style) {
+) -> (String, ratatui::style::Style, Option<f32>) {
     use ratatui::style::{Color, Modifier, Style};
 
     // 检查是否有建筑
@@ -115,6 +157,7 @@ fn get_tile_display(
         return (
             building.icon().to_string(),
             Style::default().fg(Color::Cyan),
+            None,
         );
     }
 
@@ -135,20 +178,25 @@ fn get_tile_display(
         };
 
         // 显示浇水状态：已浇水的作物加蓝色背景
-        if crop.watered {
-            return (icon, Style::default().fg(Color::Cyan).bg(Color::Rgb(30, 60, 90)));
-        }
-        return (icon, style);
+        let final_style = if crop.watered {
+            Style::default().fg(Color::Cyan).bg(Color::Rgb(30, 60, 90))
+        } else {
+            style
+        };
+
+        // 返回生长进度
+        return (icon, final_style, Some(crop.growth_progress()));
     }
 
     // 显示土地状态
     match tile.soil {
-        crate::game::SoilState::Grass => ("🌿".to_string(), Style::default().fg(Color::DarkGray)),
+        crate::game::SoilState::Grass => ("🌿".to_string(), Style::default().fg(Color::DarkGray), None),
         crate::game::SoilState::Tilled => (
             "⬜".to_string(),
             Style::default().fg(Color::Rgb(139, 90, 43)),
+            None,
         ),
-        crate::game::SoilState::Watered => ("💧".to_string(), Style::default().fg(Color::Blue)),
+        crate::game::SoilState::Watered => ("💧".to_string(), Style::default().fg(Color::Blue), None),
     }
 }
 
